@@ -1,15 +1,17 @@
 
-# Install deis client locally through pip.
-install:
-	pip install .
+client: syntax
+	go build ./...
+	pushd deis/ && go build && popd
 
-# Remove the installed copy of the deis client through pip.
-uninstall:
-	pip uninstall -y deis
+upx:
+	upx -q ./deis/deis
 
-# Clean up after setup.py droppings.
-clean:
-	rm -rf build/ dist/ *.egg-info
+format:
+	@go fmt ./...
 
-client:
-	pyinstaller deis.spec
+syntax: format
+	@go vet ./...
+	@golint .
+
+test: syntax
+	go test -v ./...
