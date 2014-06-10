@@ -613,6 +613,16 @@ def _etcd_purge_user(**kwargs):
     _etcd_client.delete('/deis/builder/users/{}'.format(username), dir=True, recursive=True)
 
 
+def _etcd_create_app(**kwargs):
+    appname = kwargs['instance']
+    _etcd_client.write('/deis/services/{}'.format(appname), None, dir=True)
+
+
+def _etcd_purge_app(**kwargs):
+    appname = kwargs['instance']
+    _etcd_client.delete('/deis/services/{}'.format(appname), dir=True, recursive=True)
+
+
 def _etcd_publish_domains(**kwargs):
     app = kwargs['instance'].app
     app_domains = app.domain_set.all()
@@ -651,3 +661,5 @@ if _etcd_client:
     post_delete.connect(_etcd_purge_user, sender=User, dispatch_uid='api.models')
     post_save.connect(_etcd_publish_domains, sender=Domain, dispatch_uid='api.models')
     post_delete.connect(_etcd_publish_domains, sender=Domain, dispatch_uid='api.models')
+    post_save.connect(_etcd_create_app, sender=App, dispatch_uid='api.models')
+    post_delete.connect(_etcd_purge_app, sender=App, dispatch_uid='api.models')
