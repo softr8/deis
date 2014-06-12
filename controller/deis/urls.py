@@ -19,6 +19,7 @@ urlpatterns = patterns(
     '',
     url(r'^accounts/', include('allauth.urls')),
     url(r'^api/', include('api.urls')),
+    url(r'^info/', 'deis.views.info'),
 )
 
 if settings.WEB_ENABLED:
