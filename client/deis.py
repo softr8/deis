@@ -1545,6 +1545,7 @@ SHORTCUTS = OrderedDict([
     ('logout', 'auth:logout'),
     ('logs', 'apps:logs'),
     ('open', 'apps:open'),
+    ('pull', 'config:pull'),
     ('register', 'auth:register'),
     ('rollback', 'releases:rollback'),
     ('run', 'apps:run'),
