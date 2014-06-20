@@ -1054,11 +1054,12 @@ class DeisClient(object):
         Your environment will be stored locally in a file named .env. This file can be
         read by foreman to load the local environment for your app.
 
-        Flags:
-            --overwrite   - allows you to have the pull overwrite keys in .env
-            --interactive - prompts for each value to be overwritten
+        Usage: deis config:pull [options]
 
-        Usage: deis config:pull [--overwrite --interactive --app=<app>]
+        Options:
+          -a APP --app=APP  The application that you wish to pull from
+          -i --interactive  Prompts for each value to be overwritten
+          -o --overwrite    Allows you to have the pull overwrite keys in .env
         """
         app = args.get('--app')
         overwrite = args.get('--overwrite')
