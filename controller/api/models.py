@@ -475,7 +475,6 @@ class Release(UuidAuditedModel):
             owner=user, app=self.app, config=config,
             build=build, version=new_version, image=target_image, summary=summary)
         # publish release to registry as new docker image
-        repository_path = self.app.id
         if self.build.sha:
             publish_release(self.build.image,
                             self.build.sha,
