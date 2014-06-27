@@ -281,6 +281,8 @@ REGISTRY_MODULE = 'registry.mock'
 REGISTRY_HOST = 'localhost'
 REGISTRY_PORT = 5000
 
+PUBLIC_INDEX_URL = 'https://index.docker.io'
+
 # check if we can register users with `deis register`
 REGISTRATION_ENABLED = True
 
