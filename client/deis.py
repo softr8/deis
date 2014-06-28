@@ -797,9 +797,6 @@ class DeisClient(object):
         if not app:
             app = self._session.app
         image = args['<image>']
-        # default images to :latest to avoid pulling entire repositories
-        if not ':' in image:
-            image = image + ':latest'
         body = {'image': image}
         sys.stdout.write('Creating build... ')
         sys.stdout.flush()
