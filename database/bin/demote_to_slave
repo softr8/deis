@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# return success if we are already a slave
+
+exit 0

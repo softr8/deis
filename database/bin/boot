@@ -24,12 +24,16 @@ fi
 
 # wait for etcd to be available
 until etcdctl --no-sync -C $ETCD ls >/dev/null; do
-	echo "waiting for etcd at $ETCD..."
-	sleep $(($ETCD_TTL/2))  # sleep for half the TTL
+  echo "waiting for etcd at $ETCD..."
+  sleep $(($ETCD_TTL/2))  # sleep for half the TTL
 done
 
 # wait until etcd has discarded potentially stale values
 sleep $(($ETCD_TTL+1))
+
+function etcd_safe_mkdir {
+  etcdctl --no-sync -C $ETCD mkdir $1 >/dev/null 2>&1 || true
+}
 
 function etcd_safe_set {
   if ! etcdctl --no-sync -C $ETCD get $ETCD_PATH/$1 >/dev/null 2>&1; then
@@ -37,6 +41,7 @@ function etcd_safe_set {
   fi
 }
 
+etcd_safe_mkdir /deis/database
 etcd_safe_set engine postgresql_psycopg2
 etcd_safe_set adminUser ${PG_ADMIN_USER:-postgres}
 etcd_safe_set adminPass ${PG_ADMIN_PASS:-changeme123}
@@ -44,10 +49,17 @@ etcd_safe_set user ${PG_USER_NAME:-deis}
 etcd_safe_set password ${PG_USER_PASS:-changeme123}
 etcd_safe_set name ${PG_USER_DB:-deis}
 
+# Generate a keypair and use it if we need to
+ssh-keygen -q -t rsa -f /tmp/id_rsa -N '' -C postgres
+etcdctl --no-sync -C $ETCD mk $ETCD_PATH/replicationKey < /tmp/id_rsa >/dev/null || true
+etcdctl --no-sync -C $ETCD mk $ETCD_PATH/replicationPubKey < /tmp/id_rsa.pub >/dev/null || true
+rm /tmp/id_rsa
+rm /tmp/id_rsa.pub
+
 # wait for confd to run once and install initial templates
 until confd -onetime -node $ETCD -config-file /app/confd.toml; do
-	echo "database: waiting for confd to write initial templates..."
-	sleep $(($ETCD_TTL/2))  # sleep for half the TTL
+  echo "database: waiting for confd to write initial templates..."
+  sleep $(($ETCD_TTL/2))  # sleep for half the TTL
 done
 
 # run the service in the background
@@ -80,24 +92,33 @@ echo deis-database running...
 # publish the service to etcd using the injected HOST and PORT
 if [[ ! -z $PUBLISH ]]; then
 
-	# configure service discovery
-	PORT=${PORT:-5432}
-	PROTO=${PROTO:-tcp}
+  # configure service discovery
+  PORT=${PORT:-5432}
+  PROTO=${PROTO:-tcp}
 
-	set +e
+  set +e
 
-	# wait for the service to become available on PUBLISH port
-	sleep 1 && while [[ -z $(netstat -lnt | awk "\$6 == \"LISTEN\" && \$4 ~ \".$PUBLISH\" && \$1 ~ \"$PROTO.?\"") ]] ; do sleep 1; done
+  # wait for the service to become available on PUBLISH port
+  sleep 1 && while [[ -z $(netstat -lnt | awk "\$6 == \"LISTEN\" && \$4 ~ \".$PUBLISH\" && \$1 ~ \"$PROTO.?\"") ]] ; do sleep 1; done
 
-	# while the port is listening, publish to etcd
-	while [[ ! -z $(netstat -lnt | awk "\$6 == \"LISTEN\" && \$4 ~ \".$PUBLISH\" && \$1 ~ \"$PROTO.?\"") ]] ; do
-		etcdctl --no-sync -C $ETCD set $ETCD_PATH/host $HOST --ttl $ETCD_TTL >/dev/null
-		etcdctl --no-sync -C $ETCD set $ETCD_PATH/port $PORT --ttl $ETCD_TTL >/dev/null
-		sleep $(($ETCD_TTL/2)) # sleep for half the TTL
-	done
+  # while the port is listening, publish to etcd
+  while [[ ! -z $(netstat -lnt | awk "\$6 == \"LISTEN\" && \$4 ~ \".$PUBLISH\" && \$1 ~ \"$PROTO.?\"") ]] ; do
+    etcdctl --no-sync -C $ETCD set /deis/database/$HOST/host $HOST --ttl $ETCD_TTL >/dev/null
+    etcdctl --no-sync -C $ETCD set /deis/database/$HOST/port $PORT --ttl $ETCD_TTL >/dev/null
 
-	# if the loop quits, something went wrong
-	exit 1
+    # now, we try to become master
+    if /app/bin/attempt_master; then
+      /app/bin/promote_to_master
+    else
+      /app/bin/demote_to_slave
+    fi
+
+    # try it all again soon
+    sleep $(($ETCD_TTL/2)) # sleep for half the TTL
+  done
+
+  # if the loop quits, something went wrong
+  exit 1
 
 fi
 
