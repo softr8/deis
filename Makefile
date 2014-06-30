@@ -20,14 +20,11 @@ define deis_units
 endef
 
 # TODO: re-evaluate the fragile start order
-COMPONENTS=builder cache controller database logger registry
-ALL_COMPONENTS=$(COMPONENTS) router
-START_COMPONENTS=registry logger cache database
-
-ALL_UNITS = $(foreach C,$(COMPONENTS),$(wildcard $(C)/systemd/*.service))
+ALL_COMPONENTS=builder cache controller database logger registry router
+START_COMPONENTS=registry logger cache
 START_UNITS = $(foreach C,$(START_COMPONENTS),$(wildcard $(C)/systemd/*.service))
 
-DATA_CONTAINER_TEMPLATES=builder/systemd/deis-builder-data.service database/systemd/deis-database-data.service logger/systemd/deis-logger-data.service registry/systemd/deis-registry-data.service
+DATA_CONTAINER_TEMPLATES=builder/systemd/deis-builder-data.service logger/systemd/deis-logger-data.service registry/systemd/deis-registry-data.service
 
 all: build run
 
@@ -44,7 +41,15 @@ install: check-fleet install-routers
 	$(FLEETCTL) load $(START_UNITS)
 	$(FLEETCTL) load controller/systemd/*.service
 	$(FLEETCTL) load builder/systemd/*.service
+	echo $(shell make install-databases)
 	echo $(shell make install-data-containers)
+
+install-databases: check-fleet
+	@$(foreach U, $(DATABASE_UNITS), \
+		cp database/systemd/deis-database.service ./$(U) ; \
+		$(FLEETCTL) load ./$(U) ; \
+		rm -f ./$(U) ; \
+	)
 
 install-data-containers: check-fleet
 	@$(foreach T, $(DATA_CONTAINER_TEMPLATES), \
@@ -77,7 +82,7 @@ rsync:
 
 run: install start
 
-start: check-fleet start-warning start-routers
+start: check-fleet start-warning start-routers start-databases
 	@# registry logger cache database
 	$(call echo_yellow,"Waiting for deis-registry to start...")
 	$(FLEETCTL) start -no-block $(START_UNITS)
@@ -112,6 +117,18 @@ start: check-fleet start-warning start-routers
 	$(call check_for_errors)
 
 	$(call echo_yellow,"Your Deis cluster is ready to go! Continue following the README to login and use Deis.")
+
+start-databases: check-fleet
+	$(call echo_yellow,"Waiting for 1 of $(DEIS_NUM_DATABASES) deis-databases to start...")
+	$(foreach U,$(DATABASE_UNITS),$(FLEETCTL) start -no-block $(U);)
+	@until $(FLEETCTL) list-units | egrep -q "deis-database.+(running)"; \
+		do sleep 2; \
+			printf "\033[0;33mStatus:\033[0m "; $(FLEETCTL) list-units | \
+			grep "deis-database" | head -n 1 | \
+			awk '{printf "%-10s (%s)    \r", $$4, $$5}'; \
+			sleep 8; \
+		done
+	$(call check_for_errors)
 
 start-routers: check-fleet start-warning
 	$(call echo_yellow,"Waiting for 1 of $(DEIS_NUM_ROUTERS) deis-routers to start...")
